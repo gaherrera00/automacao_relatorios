@@ -1,38 +1,67 @@
-# importacao das bibliotecas
 from pathlib import Path
 import pandas as pd
 
 
-# Carrega o csv e valida ele
-def carregar_dados(caminho):
+COLUNAS_OBRIGATORIAS = ["data", "produto", "quantidade", "preco_unitario"]
+
+
+def validar_colunas(df: pd.DataFrame) -> bool:
+    # aceita colunas extras, mas exige as obrigatórias
+    return set(COLUNAS_OBRIGATORIAS).issubset(df.columns)
+
+
+def carregar_dados(caminho: str) -> pd.DataFrame | None:
     arquivo = Path(caminho)
-    # Verifica se existe algo em data
-    if arquivo.exists():
-        # Verifica se é um arquivo
-        if arquivo.is_file():
-            try:
-                # Verifica se o arquivo é um csv
-                df = pd.read_csv(arquivo, sep=",")
-                print("\n## Arquivo encontrado com sucesso ##")
-                return df
-            except Exception:
-                print("\n## Arquivo de formato incompativel ##")
-                return None
-        else:
-            print("\n## Arquivo invalido,é um diretorio ou outro tipo de caminho ##")
-            return None
-    else:
-        print("\n## Arquivo não encontrado##\n")
+
+    if not arquivo.exists():
+        print("Erro: arquivo não encontrado.")
         return None
 
+    if not arquivo.is_file():
+        print("Erro: caminho inválido (não é arquivo).")
+        return None
 
-# verifica se o arquivo tem os valores necessarios
-def validar_colunas(dados):
-    lista_chegando = list(dados.columns)
-    lista_esperada = ["data", "produto", "quantidade", "preco_unitario"]
-    if lista_esperada == lista_chegando:
-        print("## Colunas como o padrao ##\n")
-        return True
-    else:
-        print("## Colunas fora do padrao ##\n")
-        return False
+    if arquivo.suffix.lower() != ".csv":
+        print("Erro: arquivo não é .csv.")
+        return None
+
+    try:
+        df = pd.read_csv(arquivo, sep=",")
+    except Exception as e:
+        print(f"Erro: falha ao ler o CSV. Detalhe: {e}")
+        return None
+
+    if not validar_colunas(df):
+        print(f"Erro: colunas obrigatórias ausentes. Esperado: {COLUNAS_OBRIGATORIAS}")
+        print(f"Colunas encontradas: {list(df.columns)}")
+        return None
+
+    # normalizações de tipo
+    df["data"] = pd.to_datetime(df["data"], errors="coerce")
+    df["quantidade"] = pd.to_numeric(df["quantidade"], errors="coerce")
+    df["preco_unitario"] = pd.to_numeric(df["preco_unitario"], errors="coerce")
+
+    # validações básicas de dados
+    if df["data"].isna().any():
+        print("Erro: há datas inválidas na coluna 'data'.")
+        return None
+
+    if df["quantidade"].isna().any() or df["preco_unitario"].isna().any():
+        print("Erro: há valores inválidos em 'quantidade' ou 'preco_unitario'.")
+        return None
+
+    # quantidade deve ser inteira e positiva
+    if (df["quantidade"] <= 0).any():
+        print("Erro: 'quantidade' deve ser > 0.")
+        return None
+
+    if (df["preco_unitario"] <= 0).any():
+        print("Erro: 'preco_unitario' deve ser > 0.")
+        return None
+
+    # força tipos finais
+    df["quantidade"] = df["quantidade"].astype(int)
+    df["preco_unitario"] = df["preco_unitario"].astype(float)
+
+    print("OK: arquivo carregado e validado.")
+    return df
